@@ -6,41 +6,49 @@ import time
 
 BASE = "https://www.persee.fr"
 
-st.title("Scraper Persée")
+st.title("Scraper Persée – Sommaire d'un numéro")
 
-issue_url = st.text_input("Colle l'URL du numéro Persée")
+issue_url = st.text_input("URL du numéro Persée")
 
 headers = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X)"
+    "User-Agent": "Mozilla/5.0"
 }
 
 if st.button("Scraper"):
 
-    if issue_url == "":
-        st.warning("Merci d'entrer une URL Persée.")
-    else:
+    if not issue_url.startswith("http"):
+        st.error("Entre une URL valide (https://...)")
+        st.stop()
 
-        r = requests.get(issue_url, headers=headers)
-        soup = BeautifulSoup(r.text, "html.parser")
+    r = requests.get(issue_url, headers=headers)
+    soup = BeautifulSoup(r.text, "html.parser")
 
-        articles = []
-        urls_seen = set()
+    articles = []
+    seen = set()
 
-        for link in soup.select("a[href*='/doc/']"):
+    # récupérer les liens d’articles
+    links = soup.find_all("a", href=True)
 
-            article_url = BASE + link.get("href")
+    for link in links:
 
-            if article_url in urls_seen:
+        href = link["href"]
+
+        if "/doc/" in href:
+
+            article_url = BASE + href
+
+            if article_url in seen:
                 continue
 
-            urls_seen.add(article_url)
+            seen.add(article_url)
 
             try:
+
                 r = requests.get(article_url, headers=headers)
                 s = BeautifulSoup(r.text, "html.parser")
 
                 # titre
-                titre = s.select_one("h1")
+                titre = s.find("h1")
                 titre = titre.text.strip() if titre else ""
 
                 # auteurs
@@ -67,17 +75,18 @@ if st.button("Scraper"):
             except:
                 pass
 
-        df = pd.DataFrame(articles)
+    if len(articles) == 0:
+        st.warning("Aucun article détecté. Vérifie l'URL du numéro.")
 
-        st.success(f"{len(df)} articles trouvés")
+    df = pd.DataFrame(articles)
 
-        st.dataframe(df)
+    st.dataframe(df)
 
-        csv = df.to_csv(index=False).encode("utf-8")
+    csv = df.to_csv(index=False).encode("utf-8")
 
-        st.download_button(
-            "Télécharger CSV",
-            csv,
-            "persee_articles.csv",
-            "text/csv"
-        )
+    st.download_button(
+        "Télécharger CSV",
+        csv,
+        "persee_articles.csv",
+        "text/csv"
+    )
