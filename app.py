@@ -1,3 +1,4 @@
+import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -5,61 +6,78 @@ import time
 
 BASE = "https://www.persee.fr"
 
-issue_url = "COLLE_ICI_URL_NUMERO"
+st.title("Scraper Persée")
+
+issue_url = st.text_input("Colle l'URL du numéro Persée")
 
 headers = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X)"
 }
 
-# récupérer la page du numéro
-r = requests.get(issue_url, headers=headers)
-soup = BeautifulSoup(r.text, "html.parser")
+if st.button("Scraper"):
 
-articles = []
+    if issue_url == "":
+        st.warning("Merci d'entrer une URL Persée.")
+    else:
 
-# récupérer tous les liens d'articles
-for link in soup.select("a[href*='/doc/']"):
+        r = requests.get(issue_url, headers=headers)
+        soup = BeautifulSoup(r.text, "html.parser")
 
-    article_url = BASE + link.get("href")
+        articles = []
+        urls_seen = set()
 
-    # éviter les doublons
-    if article_url in [a["url"] for a in articles]:
-        continue
+        for link in soup.select("a[href*='/doc/']"):
 
-    print("Scraping:", article_url)
+            article_url = BASE + link.get("href")
 
-    try:
-        r = requests.get(article_url, headers=headers)
-        s = BeautifulSoup(r.text, "html.parser")
+            if article_url in urls_seen:
+                continue
 
-        # titre
-        titre = s.select_one("h1")
-        titre = titre.text.strip() if titre else ""
+            urls_seen.add(article_url)
 
-        # auteurs
-        auteurs = [a.text.strip() for a in s.select(".authors a")]
-        auteurs = "; ".join(auteurs)
+            try:
+                r = requests.get(article_url, headers=headers)
+                s = BeautifulSoup(r.text, "html.parser")
 
-        # pages
-        pages = ""
-        for li in s.select("li"):
-            if "p." in li.text.lower():
-                pages = li.text.strip()
+                # titre
+                titre = s.select_one("h1")
+                titre = titre.text.strip() if titre else ""
 
-        articles.append({
-            "titre": titre,
-            "auteurs": auteurs,
-            "pages": pages,
-            "url": article_url
-        })
+                # auteurs
+                auteurs = [a.text.strip() for a in s.select(".authors a")]
+                auteurs = "; ".join(auteurs)
 
-        time.sleep(1)
+                # pages
+                pages = ""
+                for li in s.select("li"):
+                    if "p." in li.text.lower():
+                        pages = li.text.strip()
 
-    except:
-        pass
+                articles.append({
+                    "titre": titre,
+                    "auteurs": auteurs,
+                    "pages": pages,
+                    "url": article_url
+                })
 
-df = pd.DataFrame(articles)
+                st.write("✔", titre)
 
-df.to_excel("persee_articles.xlsx", index=False)
+                time.sleep(1)
 
-print("Terminé : persee_articles.xlsx")
+            except:
+                pass
+
+        df = pd.DataFrame(articles)
+
+        st.success(f"{len(df)} articles trouvés")
+
+        st.dataframe(df)
+
+        csv = df.to_csv(index=False).encode("utf-8")
+
+        st.download_button(
+            "Télécharger CSV",
+            csv,
+            "persee_articles.csv",
+            "text/csv"
+        )
